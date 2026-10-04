@@ -78,7 +78,7 @@ struct SettingsView: View {
                     NavigationLink {
                         ConfigEditorView()
                     } label: {
-                        LabeledContent("config.json", value: AppConfig.isEdited ? "Edited" : "Bundled")
+                        LabeledContent("Configuration", value: AppConfig.isEdited ? "Edited" : "Default")
                     }
                     LabeledContent("Time zone", value: model.config.timeZone)
                     Link("Data: awqaf-prayer.netlify.app", destination: URL(string: model.config.defaultURL)!)

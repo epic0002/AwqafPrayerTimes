@@ -34,23 +34,18 @@ struct AppConfig: Codable, Equatable {
     /// Re-read the file on next access (e.g. after the app edited it).
     static func reload() { cached = nil }
 
-    /// Text of the config currently in effect.
-    static func text() -> String {
-        for url in [editedURL, bundledURL].compactMap({ $0 }) {
-            if let s = try? String(contentsOf: url, encoding: .utf8) { return s }
-        }
-        return (try? String(data: encoder.encode(fallback), encoding: .utf8)) ?? "{}"
-    }
-
-    /// Validates and saves edited JSON text. Throws if it isn't a valid config.
-    @discardableResult
-    static func save(text: String) throws -> AppConfig {
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(text.utf8))
+    /// Validates and saves an edited config, which then overrides the bundled file.
+    static func save(_ config: AppConfig) throws {
         guard TimeZone(identifier: config.timeZone) != nil else { throw ConfigError.badTimeZone(config.timeZone) }
         guard let url = URL(string: config.defaultURL), url.scheme != nil else { throw ConfigError.badURL }
-        try Data(text.utf8).write(to: editedURL, options: .atomic)
+        try encoder.encode(config).write(to: editedURL, options: .atomic)
         reload()
-        return config
+    }
+
+    /// The config from the app bundle, ignoring any edits.
+    static var bundled: AppConfig {
+        bundledURL.flatMap { try? Data(contentsOf: $0) }
+            .flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) } ?? .fallback
     }
 
     static func resetToBundled() {

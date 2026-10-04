@@ -1,81 +1,93 @@
 import SwiftUI
 
-/// Edits config.json. The bundled file can't be modified on device, so the edited
-/// version is saved separately and used instead of it until reset.
+/// Edits config.json with simple controls. The bundled file can't be modified on
+/// device, so the edited version is saved separately and used instead until reset.
 struct ConfigEditorView: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var text = AppConfig.text()
+    @State private var draft = AppConfig.current
     @State private var error: String?
-    @State private var confirmReset = false
+
+    private static let timeZones = [
+        "Asia/Amman", "Asia/Jerusalem", "Asia/Damascus", "Asia/Beirut", "Asia/Baghdad",
+        "Asia/Riyadh", "Asia/Kuwait", "Asia/Qatar", "Asia/Dubai", "Africa/Cairo",
+        "Europe/Istanbul", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago",
+        "America/Los_Angeles", "UTC",
+    ]
+    private static let dayOptions = [1, 3, 7, 14, 30]
 
     var body: some View {
         Form {
             Section {
-                TextEditor(text: $text)
-                    .font(.system(.footnote, design: .monospaced))
+                TextField(AppConfig.bundled.defaultURL, text: $draft.defaultURL)
+                    .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
-                    .frame(minHeight: 180)
+                    .font(.callout)
+                    .onSubmit(save)
+                if draft.defaultURL != AppConfig.bundled.defaultURL {
+                    Button("Use original URL") { draft.defaultURL = AppConfig.bundled.defaultURL; save() }
+                }
             } header: {
-                Text(AppConfig.isEdited ? "Edited config.json" : "Bundled config.json")
+                Text("Default URL")
             } footer: {
-                Text("""
-                defaultURL: CSV used when the URL field in Settings is empty.
-                timeZone: zone the CSV times are in (e.g. Asia/Amman).
-                autoUpdateDaysBeforeEnd: how many days before the data runs out to download new timings.
-                """)
+                Text("Used when the URL field in Settings is empty.")
+            }
+
+            Section {
+                Picker("Time zone", selection: $draft.timeZone) {
+                    ForEach(timeZoneOptions, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ")).tag($0) }
+                }
+                Picker("Auto-update", selection: autoUpdateDays) {
+                    ForEach(Self.dayOptions, id: \.self) { d in
+                        Text(d == 1 ? "1 day before end" : "\(d) days before end").tag(d)
+                    }
+                }
+            } footer: {
+                Text("Time zone: the zone the CSV times are in. Auto-update: how early to download new timings before the current file runs out.")
             }
 
             if let error {
                 Section { Text(error).foregroundColor(.red).font(.callout) }
             }
 
-            Section {
-                Button("Save") { save() }
-                if AppConfig.isEdited {
-                    Button("Reset to bundled config.json", role: .destructive) { confirmReset = true }
+            if AppConfig.isEdited {
+                Section {
+                    Button("Reset to defaults", role: .destructive) {
+                        AppConfig.resetToBundled()
+                        draft = AppConfig.current
+                        error = nil
+                        model.configDidChange()
+                    }
                 }
             }
         }
-        .navigationTitle("config.json")
+        .pickerStyle(.menu)
+        .navigationTitle("Configuration")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Discard your edits and use the bundled config.json?",
-                            isPresented: $confirmReset, titleVisibility: .visible) {
-            Button("Reset", role: .destructive) {
-                AppConfig.resetToBundled()
-                model.configDidChange()
-                text = AppConfig.text()
-                error = nil
-            }
-        }
+        .onChange(of: draft.timeZone) { _ in save() }
+        .onChange(of: draft.autoUpdateDaysBeforeEnd) { _ in save() }
+        .onDisappear(perform: save)
+    }
+
+    /// Common zones, plus the current one if it isn't in the list.
+    private var timeZoneOptions: [String] {
+        Self.timeZones.contains(draft.timeZone) ? Self.timeZones : [draft.timeZone] + Self.timeZones
+    }
+
+    private var autoUpdateDays: Binding<Int> {
+        Binding(get: { draft.autoUpdateDaysBeforeEnd ?? 7 },
+                set: { draft.autoUpdateDaysBeforeEnd = $0 })
     }
 
     private func save() {
-        // Undo iOS smart quotes, which break JSON.
-        let cleaned = text
-            .replacingOccurrences(of: "\u{201C}", with: "\"").replacingOccurrences(of: "\u{201D}", with: "\"")
-            .replacingOccurrences(of: "\u{2018}", with: "'").replacingOccurrences(of: "\u{2019}", with: "'")
+        draft.defaultURL = draft.defaultURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard draft != AppConfig.current else { return }
         do {
-            try AppConfig.save(text: cleaned)
-            text = cleaned
+            try AppConfig.save(draft)
             error = nil
             model.configDidChange()
-            dismiss()
-        } catch let e as DecodingError {
-            error = "Invalid JSON: \(Self.describe(e))"
         } catch {
             self.error = error.localizedDescription
-        }
-    }
-
-    private static func describe(_ e: DecodingError) -> String {
-        switch e {
-        case .keyNotFound(let key, _): return "missing \"\(key.stringValue)\""
-        case .typeMismatch(_, let c), .valueNotFound(_, let c): return "wrong type at \"\(c.codingPath.map(\.stringValue).joined(separator: "."))\""
-        case .dataCorrupted(let c): return c.debugDescription
-        @unknown default: return "\(e)"
         }
     }
 }

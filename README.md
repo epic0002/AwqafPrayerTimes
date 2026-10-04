@@ -43,9 +43,10 @@ Dates can be `dd/MM/yyyy` or `yyyy-MM-dd`. Times are read in the time zone from 
   "autoUpdateDaysBeforeEnd": 7
 }
 ```
-**Editing in the app:** go to Settings → About → config.json. iOS doesn't let an app change files in
-its own bundle, so your edited copy is saved in the app's data and used instead of the bundled file.
-**Reset to bundled config.json** removes the edited copy. If you change `timeZone`, the loaded timings
+**Editing in the app:** go to Settings → About → Configuration. You can change the default URL, and
+pick the time zone and auto-update timing from drop-down menus. iOS doesn't let an app change files in
+its own bundle, so your changes are saved in the app's data and used instead of the bundled file.
+**Reset to defaults** goes back to the bundled file. If you change the time zone, the loaded timings
 are re-read in the new zone.
 
 **Changing the bundled default:** it's at `Payload/AwqafPrayerTimes.app/config.json` inside the IPA.
