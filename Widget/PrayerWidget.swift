@@ -1,50 +1,6 @@
 import WidgetKit
 import SwiftUI
 
-struct PrayerEntry: TimelineEntry {
-    let date: Date
-    let previous: PrayerEvent?
-    let next: PrayerEvent?
-    let use24Hour: Bool
-    let arabic: Bool
-    let elapsedWindow: Int
-
-    /// Elapsed (+) for the first `elapsedWindow` minutes after a timing, remaining (−) afterwards.
-    var showsElapsed: Bool {
-        guard let previous else { return false }
-        return date.timeIntervalSince(previous.date) < Double(elapsedWindow * 60)
-    }
-
-    var counterMinutes: Int? {
-        if showsElapsed, let previous {
-            return Int(floor(date.timeIntervalSince(previous.date) / 60))
-        }
-        guard let next else { return nil }
-        return Int(ceil(next.date.timeIntervalSince(date) / 60))
-    }
-
-    var counterText: String {
-        counterMinutes.map(Formatters.duration(minutes:)) ?? "--"
-    }
-
-    static func make(at date: Date, schedule: Schedule) -> PrayerEntry {
-        PrayerEntry(date: date,
-                    previous: schedule.previous(at: date),
-                    next: schedule.next(after: date),
-                    use24Hour: Settings.use24Hour,
-                    arabic: Settings.arabicNames,
-                    elapsedWindow: Settings.elapsedWindowMinutes)
-    }
-
-    static let placeholder: PrayerEntry = {
-        let now = Date()
-        return PrayerEntry(date: now,
-                           previous: PrayerEvent(prayer: .dhuhr, date: now.addingTimeInterval(-600)),
-                           next: PrayerEvent(prayer: .asr, date: now.addingTimeInterval(9000)),
-                           use24Hour: true, arabic: false, elapsedWindow: 30)
-    }()
-}
-
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> PrayerEntry { .placeholder }
 
@@ -71,125 +27,116 @@ struct Provider: TimelineProvider {
     }
 }
 
-// MARK: - Views
-
-struct CounterLabel: View {
-    let entry: PrayerEntry
-    var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: entry.showsElapsed ? "plus" : "minus")
-                .font(.system(size: 11, weight: .heavy))
-            Text(entry.counterText)
-                .monospacedDigit()
-        }
-    }
-}
-
-struct RectangularView: View {
-    let entry: PrayerEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            row(entry.previous, highlighted: entry.showsElapsed)
-            row(entry.next, highlighted: !entry.showsElapsed)
-            CounterLabel(entry: entry)
-                .font(.headline)
-                .widgetAccentable()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func row(_ event: PrayerEvent?, highlighted: Bool) -> some View {
-        HStack {
-            Text(event?.prayer.name(arabic: entry.arabic) ?? "—")
-            Spacer(minLength: 4)
-            Text(event.map { Formatters.time($0.date, use24Hour: entry.use24Hour) } ?? "--:--")
-                .monospacedDigit()
-        }
-        .font(.system(.body, design: .rounded).weight(highlighted ? .semibold : .regular))
-        .opacity(highlighted ? 1 : 0.7)
-        .lineLimit(1)
-    }
-}
-
-struct CircularView: View {
-    let entry: PrayerEntry
-    var body: some View {
-        ZStack {
-            AccessoryWidgetBackground()
-            VStack(spacing: 0) {
-                Text((entry.showsElapsed ? entry.previous : entry.next)?.prayer.name(arabic: entry.arabic) ?? "")
-                    .font(.system(size: 10, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                CounterLabel(entry: entry)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.6)
-            }
-            .padding(4)
-        }
-    }
-}
-
-struct InlineView: View {
-    let entry: PrayerEntry
-    var body: some View {
-        let target = entry.showsElapsed ? entry.previous : entry.next
-        let name = target?.prayer.name(arabic: entry.arabic) ?? ""
-        let time = target.map { Formatters.time($0.date, use24Hour: entry.use24Hour) } ?? ""
-        Text("\(name) \(time)  \(entry.showsElapsed ? "+" : "−")\(entry.counterText)")
-    }
-}
-
-struct SmallView: View {
-    let entry: PrayerEntry
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Prayer Times").font(.caption).foregroundColor(.secondary)
-            RectangularView(entry: entry)
-            Spacer(minLength: 0)
-        }
-    }
-}
-
-struct PrayerWidgetView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: PrayerEntry
-
-    var body: some View {
-        switch family {
-        case .accessoryRectangular: RectangularView(entry: entry)
-        case .accessoryCircular: CircularView(entry: entry)
-        case .accessoryInline: InlineView(entry: entry)
-        default: SmallView(entry: entry)
-        }
-    }
-}
-
 extension View {
+    /// Lock screen widgets get no background; home screen widgets get the time-of-day gradient.
     @ViewBuilder
-    func widgetBackground() -> some View {
+    func widgetBackground(_ entry: PrayerEntry, home: Bool) -> some View {
+        let gradient = PrayerTheme.gradient(for: entry.previous?.prayer)
         if #available(iOSApplicationExtension 17.0, *) {
-            containerBackground(.fill.tertiary, for: .widget)
+            if home {
+                containerBackground(for: .widget) { gradient }
+            } else {
+                containerBackground(for: .widget) { Color.clear }
+            }
+        } else if home {
+            padding().background(gradient)
         } else {
             self
         }
     }
 }
 
+private func isHome(_ family: WidgetFamily) -> Bool {
+    [.systemSmall, .systemMedium, .systemLarge].contains(family)
+}
+
+/// Picks the view for the current family and applies the right background.
+struct StyledView<Content: View>: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: PrayerEntry
+    @ViewBuilder let content: (WidgetFamily) -> Content
+    var body: some View {
+        content(family).widgetBackground(entry, home: isHome(family))
+    }
+}
+
+// MARK: - Widgets
+
 struct PrayerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Shared.widgetKind, provider: Provider()) { entry in
-            PrayerWidgetView(entry: entry).widgetBackground()
+            StyledView(entry: entry) { family in
+                switch family {
+                case .accessoryCircular: ClassicCircular(entry: entry)
+                case .accessoryInline: ClassicInline(entry: entry)
+                case .systemSmall: ClassicSmall(entry: entry)
+                default: ClassicRectangular(entry: entry)
+                }
+            }
         }
-        .configurationDisplayName("Prayer Times")
-        .description("Previous and next prayer with elapsed / remaining time.")
+        .configurationDisplayName("Classic")
+        .description("Previous and next timing with elapsed / remaining time.")
         .supportedFamilies([.accessoryRectangular, .accessoryCircular, .accessoryInline, .systemSmall])
+    }
+}
+
+struct CountdownWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "CountdownWidget", provider: Provider()) { entry in
+            StyledView(entry: entry) { family in
+                switch family {
+                case .accessoryCircular: CountdownCircular(entry: entry)
+                case .systemSmall: CountdownSmall(entry: entry)
+                default: CountdownRectangular(entry: entry)
+                }
+            }
+        }
+        .configurationDisplayName("Countdown")
+        .description("A big counter to the next timing.")
+        .supportedFamilies([.accessoryRectangular, .accessoryCircular, .systemSmall])
+    }
+}
+
+struct ProgressWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ProgressWidget", provider: Provider()) { entry in
+            StyledView(entry: entry) { family in
+                switch family {
+                case .accessoryCircular: ProgressCircular(entry: entry)
+                case .systemMedium: ProgressMedium(entry: entry)
+                default: ProgressRectangular(entry: entry)
+                }
+            }
+        }
+        .configurationDisplayName("Progress")
+        .description("A progress bar from the previous timing to the next.")
+        .supportedFamilies([.accessoryRectangular, .accessoryCircular, .systemMedium])
+    }
+}
+
+struct DayWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "DayWidget", provider: Provider()) { entry in
+            StyledView(entry: entry) { family in
+                switch family {
+                case .systemMedium: DayMedium(entry: entry)
+                case .systemLarge: DayLarge(entry: entry)
+                default: DayRectangular(entry: entry)
+                }
+            }
+        }
+        .configurationDisplayName("Day")
+        .description("Upcoming timings at a glance.")
+        .supportedFamilies([.accessoryRectangular, .systemMedium, .systemLarge])
     }
 }
 
 @main
 struct PrayerWidgetBundle: WidgetBundle {
-    var body: some Widget { PrayerWidget() }
+    var body: some Widget {
+        PrayerWidget()
+        CountdownWidget()
+        ProgressWidget()
+        DayWidget()
+    }
 }

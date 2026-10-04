@@ -7,11 +7,16 @@ official Jordanian Ministry of Awqaf timings as a CSV file.
 
 ## Features
 
-- **Lock screen widget** (rectangular, circular, inline, plus a small home screen widget)
-  - Shows the previous timing (sunrise counts) and the next one, with their times
-  - For the first 30 min after a timing it shows time elapsed: `+ 0:12`
-  - After that it shows time remaining until the next one: `− 1:05`
-  - You can change the 30 min window in Settings
+- **Widgets**: four styles, each listed separately in the widget gallery
+  - **Classic**: previous and next timing with their times, plus the counter
+    (lock screen rectangular / circular / inline, home screen small)
+  - **Countdown**: a big `+`/`−` counter (rectangular, a circular ring gauge, home screen small)
+  - **Progress**: a bar running from the previous timing to the next (rectangular, circular, home screen medium)
+  - **Day**: the next three timings on the lock screen, or all six on the home screen (medium, large)
+  - For the first 30 min after a timing the counter shows time elapsed: `+ 0:12`.
+    After that it shows time remaining until the next one: `− 1:05`. Sunrise counts as a timing.
+    You can change the 30 min window in Settings.
+  - Home screen widgets use a background colour that follows the time of day (dawn, noon, sunset, night…)
 - **Data source**: a CSV from a URL (default `https://awqaf-prayer.netlify.app/times.csv`) or a file you import
   - The default URL is set in `config.json` inside the app bundle (a plain file, not compiled into the binary)
   - Updates automatically when the loaded data is about to run out (around the end of the year),
