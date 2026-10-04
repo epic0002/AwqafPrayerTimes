@@ -1,0 +1,43 @@
+name: AwqafPrayerTimes
+options:
+  bundleIdPrefix: app.prayertimesjo
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  AwqafPrayerTimes:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.prayertimesjo
+        PRODUCT_NAME: AwqafPrayerTimes
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - target: PrayerWidget
+        embed: true
+  PrayerWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.prayertimesjo.widget
+        PRODUCT_NAME: PrayerWidget
+        INFOPLIST_FILE: Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
